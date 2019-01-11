@@ -131,6 +131,6 @@ class ImageFaces extends StatelessWidget {
 class NoImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Center(child: Text('No image selected.'));
+    return Center(child: Text('Please select an image'));
   }
 }

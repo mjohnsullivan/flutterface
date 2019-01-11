@@ -1,6 +1,6 @@
-# flutter_faces
+# Flutter Face
 
-A new Flutter project.
+Face detection in Flutter.
 
 ## Getting Started
 
