@@ -15,7 +15,7 @@ dependencies:
 
   firebase_ml_vision:
     git:
-      url: git@github.com:flutter/plugins.git
+      url: https://github.com/flutter/plugins.git
       path: packages/firebase_ml_vision
 
 dev_dependencies:

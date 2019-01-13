@@ -9,6 +9,7 @@ import 'dart:ui' as ui;
 import 'dart:math' show max;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_faces/face_detector.dart';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_ml_vision/firebase_ml_vision.dart';
@@ -37,17 +38,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future _getImage() async {
     final image = await ImagePicker.pickImage(source: ImageSource.gallery);
-    final faces = await _findFaces(image);
+    final faces = await findFaces(image);
     setState(() {
       _image = image;
       _faces = faces;
     });
-  }
-
-  Future<List<Face>> _findFaces(File image) async {
-    final visionImage = FirebaseVisionImage.fromFile(image);
-    final faceDetector = FirebaseVision.instance.faceDetector();
-    return await faceDetector.detectInImage(visionImage);
   }
 
   @override
@@ -56,97 +51,16 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: Text('Flutter Faces'),
       ),
-      body: Center(
-          child: _image == null
-              ? NoImage()
-              : ImageFaces(imageFile: _image, faces: _faces)),
+      body: _image == null
+          ? NoImage()
+          // : ImageFaces(imageFile: _image, faces: _faces)),
+          : ImageWithFaces(_image, _faces),
       floatingActionButton: FloatingActionButton(
         onPressed: _getImage,
         tooltip: 'Pick Image',
         child: Icon(Icons.add_a_photo),
       ),
     );
-  }
-}
-
-/// Displays an image with faces highlighted
-class ImageFaces extends StatelessWidget {
-  ImageFaces({this.imageFile, this.faces});
-  final File imageFile;
-  final List<Face> faces;
-
-  List<Widget> _getFaceBoxes(Size originalImageSize, Size newImageSize) {
-    final faceBoundingBoxes = <Widget>[];
-    faces.forEach((face) {
-      print('Face detected: ${face.boundingBox}');
-      print(
-        'Face - top: ${face.boundingBox.top}, bottom: ${face.boundingBox.bottom}, left: ${face.boundingBox.left}, right: ${face.boundingBox.right}',
-      );
-      final top = face.boundingBox.top *
-          (newImageSize.height / originalImageSize.height);
-      final bottom = face.boundingBox.bottom *
-          (newImageSize.height / originalImageSize.height);
-      final left = face.boundingBox.left *
-          (newImageSize.width / originalImageSize.width);
-      final right = face.boundingBox.right *
-          (newImageSize.width / originalImageSize.width);
-
-      print(
-        'Face box - top: $top, bottom: $bottom, left: $left, right: $right',
-      );
-
-      final center =
-          Offset(((right - left) / 2) + left, ((bottom - top) / 2) + top);
-      final radius = [bottom - top, right - left].reduce(max) / 2;
-
-      print('Face center: $center, radius: $radius');
-      /*
-      faceBoundingBoxes.add(Positioned(
-          top: top,
-          height: bottom - top,
-          left: left,
-          width: right - left,
-          child: Container(color: Colors.blue)));
-      */
-      faceBoundingBoxes.add(Circle(center: center, radius: radius));
-    });
-
-    return faceBoundingBoxes;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final image = Image.file(imageFile, fit: BoxFit.contain);
-    final completer = Completer<ui.Image>();
-
-    image.image.resolve(ImageConfiguration()).addListener(
-        (ImageInfo info, bool _) => completer.complete(info.image));
-
-    return FutureBuilder(
-        future: completer.future,
-        builder: (context, AsyncSnapshot<ui.Image> snapshot) {
-          if (snapshot.hasData) {
-            print('Image size: ${snapshot.data}');
-            return LayoutBuilder(builder: (context, constraints) {
-              print('Stack constraints: $constraints');
-              final faceBoxes = _getFaceBoxes(
-                Size(snapshot.data.width.toDouble(),
-                    snapshot.data.height.toDouble()),
-                Size(constraints.maxWidth, constraints.maxHeight),
-              );
-              return Stack(
-                children: [
-                  Positioned.fill(
-                      child: LayoutBuilder(builder: (context, constraints) {
-                    print('Image constraints: $constraints');
-                    return image;
-                  })),
-                ]..addAll(faceBoxes),
-              );
-            });
-          }
-          return Center(child: CircularProgressIndicator());
-        });
   }
 }
 
@@ -157,36 +71,105 @@ class NoImage extends StatelessWidget {
   }
 }
 
-class Circle extends StatelessWidget {
-  Circle({@required this.center, @required this.radius, this.child});
-  final Offset center;
-  final double radius;
-  final Widget child;
-
+class ImageWithFaces extends StatelessWidget {
+  ImageWithFaces(this.image, this.faces);
+  final File image;
+  final List<Face> faces;
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: CirclePainter(center, radius),
-      child: Container(color: Colors.transparent),
+    return Stack(
+      children: <Widget>[
+        Positioned.fill(
+            child: FittedBox(
+                fit: BoxFit.cover,
+                child: FacialImageAnnotator(image: image, faces: faces)))
+      ],
     );
   }
 }
 
-class CirclePainter extends CustomPainter {
-  CirclePainter(this.center, this.radius);
-  final Offset center;
-  final double radius;
+/// Annotates an image
+class FacialImageAnnotator extends StatelessWidget {
+  FacialImageAnnotator({@required this.image, @required this.faces});
+  final File image;
+  final List<Face> faces;
 
-  @override
-  void paint(ui.Canvas canvas, ui.Size size) {
-    print('Paint size: $size');
-    final paint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 10;
-    canvas.drawCircle(center, radius, paint);
+  // Reads a raw image file from local storage
+  Future<ui.Image> _loadImage(File file) async {
+    final List<int> data = await file.readAsBytes();
+    if (data == null) throw 'Unable to read data';
+    final codec = await ui.instantiateImageCodec(data);
+    final frame = await codec.getNextFrame();
+    return frame.image;
   }
 
   @override
-  bool shouldRepaint(CirclePainter oldDelegate) => false;
+  Widget build(BuildContext context) {
+    // Use a FutureBuilder to retrieve the image info
+    return FutureBuilder(
+        future: _loadImage(image),
+        builder: (context, AsyncSnapshot<ui.Image> snapshot) {
+          return FittedBox(
+            // FittedBox to correctly size the SizedBox
+            child: snapshot.hasData
+                ? SizedBox(
+                    // SizedBox to ensure canvas size is the same as the image's size
+                    width: snapshot.data.width.toDouble(),
+                    height: snapshot.data.height.toDouble(),
+                    child: CustomPaint(
+                      painter: AnnotatedImagePainter(snapshot.data, faces),
+                    ),
+                  )
+                : Center(child: CircularProgressIndicator()),
+          );
+        });
+  }
+}
+
+class AnnotatedImagePainter extends CustomPainter {
+  AnnotatedImagePainter(this.image, this.faces);
+  final ui.Image image;
+  final List<Face> faces;
+
+  @override
+  void paint(ui.Canvas canvas, ui.Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = [size.width, size.height].reduce(max) / 100;
+    canvas.drawImage(image, const Offset(0, 0), Paint());
+    highlightFacesCircle(canvas, paint);
+    highlightLandmarks(canvas, paint);
+  }
+
+  void highlightFacesRect(Canvas canvas, Paint paint) => faces.forEach(
+      (face) => canvas.drawRect(rectangleToRect(face.boundingBox), paint));
+
+  void highlightFacesCircle(Canvas canvas, Paint paint) =>
+      faces.forEach((face) {
+        final left = face.boundingBox.left;
+        final right = face.boundingBox.right;
+        final top = face.boundingBox.top;
+        final bottom = face.boundingBox.bottom;
+        final center =
+            Offset(((right - left) / 2) + left, ((bottom - top) / 2) + top);
+        final radius = [bottom - top, right - left].reduce(max) / 2;
+        canvas.drawCircle(center, radius, paint);
+      });
+
+  void highlightLandmarks(Canvas canvas, Paint paint) => faces.forEach(
+        (face) => [
+              FaceLandmarkType.leftEye,
+              FaceLandmarkType.rightEye,
+              FaceLandmarkType.bottomMouth
+            ].forEach((type) {
+              final landmark = face.getLandmark(type);
+              if (landmark != null) {
+                canvas.drawCircle(pointToOffset(landmark.position), 100, paint);
+              }
+            }),
+      );
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
