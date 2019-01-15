@@ -1,5 +1,5 @@
 name: flutter_faces
-description: Face detection with Flutter and Firebase
+description: Face detection with Flutter
 
 version: 1.0.0+1
 
@@ -10,13 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
 
-  path_provider: ^0.4.1
   image_picker: ^0.4.12
-
-  firebase_ml_vision:
-    git:
-      url: https://github.com/flutter/plugins.git
-      path: packages/firebase_ml_vision
+  firebase_ml_vision: ^0.2.1
 
 dev_dependencies:
   flutter_test:
