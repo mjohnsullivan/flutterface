@@ -22,26 +22,26 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Face Detector',
-      home: MyHomePage(),
+      home: FacePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
+class FacePage extends StatefulWidget {
   @override
-  createState() => _MyHomePageState();
+  createState() => _FacePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  File _image;
+class _FacePageState extends State<FacePage> {
+  File _imageFile;
   List<Face> _faces;
 
   Future _getImage() async {
-    final image = await ImagePicker.pickImage(source: ImageSource.gallery);
-    final faces = await findFaces(image);
+    final imageFile = await ImagePicker.pickImage(source: ImageSource.gallery);
+    final faces = await findFaces(imageFile);
     if (mounted) {
       setState(() {
-        _image = image;
+        _imageFile = imageFile;
         _faces = faces;
       });
     }
@@ -53,7 +53,7 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: Text('Flutter Face Detector'),
       ),
-      body: _image == null ? NoImage() : ImageWithFaces(_image, _faces),
+      body: _imageFile == null ? NoImage() : ImageWithFaces(_imageFile, _faces),
       floatingActionButton: FloatingActionButton(
         onPressed: _getImage,
         tooltip: 'Pick Image',
