@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Flutter Face Detector',
       home: MyHomePage(),
     );
   }
@@ -39,22 +39,21 @@ class _MyHomePageState extends State<MyHomePage> {
   Future _getImage() async {
     final image = await ImagePicker.pickImage(source: ImageSource.gallery);
     final faces = await findFaces(image);
-    setState(() {
-      _image = image;
-      _faces = faces;
-    });
+    if (mounted) {
+      setState(() {
+        _image = image;
+        _faces = faces;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Flutter Faces'),
+        title: Text('Flutter Face Detector'),
       ),
-      body: _image == null
-          ? NoImage()
-          // : ImageFaces(imageFile: _image, faces: _faces)),
-          : ImageWithFaces(_image, _faces),
+      body: _image == null ? NoImage() : ImageWithFaces(_image, _faces),
       floatingActionButton: FloatingActionButton(
         onPressed: _getImage,
         tooltip: 'Pick Image',
@@ -72,8 +71,8 @@ class NoImage extends StatelessWidget {
 }
 
 class ImageWithFaces extends StatelessWidget {
-  ImageWithFaces(this.image, this.faces);
-  final File image;
+  ImageWithFaces(this.imageFilePath, this.faces);
+  final File imageFilePath;
   final List<Face> faces;
   @override
   Widget build(BuildContext context) {
@@ -82,47 +81,67 @@ class ImageWithFaces extends StatelessWidget {
         Positioned.fill(
             child: FittedBox(
                 fit: BoxFit.cover,
-                child: FacialImageAnnotator(image: image, faces: faces)))
+                child: FacialImageAnnotator(
+                    imageFilePath: imageFilePath, faces: faces)))
       ],
     );
   }
 }
 
 /// Annotates an image
-class FacialImageAnnotator extends StatelessWidget {
-  FacialImageAnnotator({@required this.image, @required this.faces});
-  final File image;
+/// Using a StatefulWidget to manage loading of the image
+class FacialImageAnnotator extends StatefulWidget {
+  FacialImageAnnotator({@required this.imageFilePath, @required this.faces});
+  final File imageFilePath;
   final List<Face> faces;
 
-  // Reads a raw image file from local storage
-  Future<ui.Image> _loadImage(File file) async {
+  @override
+  createState() => FacialImageAnnotatorState();
+}
+
+class FacialImageAnnotatorState extends State<FacialImageAnnotator> {
+  ui.Image image;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage(widget.imageFilePath);
+  }
+
+  @override
+  void didUpdateWidget(FacialImageAnnotator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    print('Widget updated');
+    _loadImage(widget.imageFilePath);
+  }
+
+  void _loadImage(File file) async {
     final List<int> data = await file.readAsBytes();
     if (data == null) throw 'Unable to read data';
-    final codec = await ui.instantiateImageCodec(data);
-    final frame = await codec.getNextFrame();
-    return frame.image;
+    final loadedImage = await decodeImageFromList(data);
+    setState(() => image = loadedImage);
+    print('Imge state set');
+    //final codec = await ui.instantiateImageCodec(data);
+    //final frame = await codec.getNextFrame();
+    //return frame.image;
   }
 
   @override
   Widget build(BuildContext context) {
     // Use a FutureBuilder to retrieve the image info
-    return FutureBuilder(
-        future: _loadImage(image),
-        builder: (context, AsyncSnapshot<ui.Image> snapshot) {
-          return FittedBox(
-            // FittedBox to correctly size the SizedBox
-            child: snapshot.hasData
-                ? SizedBox(
-                    // SizedBox to ensure canvas size is the same as the image's size
-                    width: snapshot.data.width.toDouble(),
-                    height: snapshot.data.height.toDouble(),
-                    child: CustomPaint(
-                      painter: AnnotatedImagePainter(snapshot.data, faces),
-                    ),
-                  )
-                : Center(child: CircularProgressIndicator()),
-          );
-        });
+    return FittedBox(
+      // FittedBox to correctly size the SizedBox
+      child: image != null
+          ? SizedBox(
+              // SizedBox to ensure canvas size is the same as the image's size
+              width: image.width.toDouble(),
+              height: image.height.toDouble(),
+              child: CustomPaint(
+                painter: AnnotatedImagePainter(image, widget.faces),
+              ),
+            )
+          : Center(child: CircularProgressIndicator()),
+    );
   }
 }
 
@@ -136,8 +155,8 @@ class AnnotatedImagePainter extends CustomPainter {
     final paint = Paint()
       ..color = Colors.black
       ..style = PaintingStyle.stroke
-      ..strokeWidth = [size.width, size.height].reduce(max) / 100;
-    canvas.drawImage(image, const Offset(0, 0), Paint());
+      ..strokeWidth = size.longestSide / 100;
+    canvas.drawImage(image, Offset.zero, Paint());
     highlightFacesCircle(canvas, paint);
     highlightLandmarks(canvas, paint);
   }
@@ -145,17 +164,18 @@ class AnnotatedImagePainter extends CustomPainter {
   void highlightFacesRect(Canvas canvas, Paint paint) => faces.forEach(
       (face) => canvas.drawRect(rectangleToRect(face.boundingBox), paint));
 
-  void highlightFacesCircle(Canvas canvas, Paint paint) =>
-      faces.forEach((face) {
-        final left = face.boundingBox.left;
-        final right = face.boundingBox.right;
-        final top = face.boundingBox.top;
-        final bottom = face.boundingBox.bottom;
-        final center =
-            Offset(((right - left) / 2) + left, ((bottom - top) / 2) + top);
-        final radius = [bottom - top, right - left].reduce(max) / 2;
-        canvas.drawCircle(center, radius, paint);
-      });
+  void highlightFacesCircle(Canvas canvas, Paint paint) {
+    for (var face in faces) {
+      final left = face.boundingBox.left;
+      final right = face.boundingBox.right;
+      final top = face.boundingBox.top;
+      final bottom = face.boundingBox.bottom;
+      final center =
+          Offset(((right - left) / 2) + left, ((bottom - top) / 2) + top);
+      final radius = [bottom - top, right - left].reduce(max) / 2;
+      canvas.drawCircle(center, radius, paint);
+    }
+  }
 
   void highlightLandmarks(Canvas canvas, Paint paint) => faces.forEach(
         (face) => [
@@ -171,5 +191,6 @@ class AnnotatedImagePainter extends CustomPainter {
       );
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
+  bool shouldRepaint(AnnotatedImagePainter oldDelegate) =>
+      image != oldDelegate.image || faces != oldDelegate.faces;
 }
