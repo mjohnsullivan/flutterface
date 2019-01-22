@@ -4,11 +4,9 @@
 
 import 'dart:io';
 import 'dart:ui' as ui;
-
-import 'dart:math' show max;
+import 'dart:math' show Point, Rectangle, max;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_faces/face_detector.dart';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_ml_vision/firebase_ml_vision.dart';
@@ -155,20 +153,26 @@ class FacialImageAnnotatorState extends State<FacialImageAnnotator> {
 }
 
 class AnnotatedImagePainter extends CustomPainter {
-  AnnotatedImagePainter(this.image, this.faces);
+  AnnotatedImagePainter(this.image, this.faces, [this.withCircle = true]);
   final ui.Image image;
   final List<Face> faces;
+  final bool withCircle;
 
   @override
   void paint(ui.Canvas canvas, ui.Size size) {
-    final paint = Paint()
-      ..color = Colors.black
+    final highlighter = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = size.longestSide / 100;
     canvas.drawImage(image, Offset.zero, Paint());
-    _highlightFacesCircle(canvas, paint);
-    _highlightLandmarks(canvas, paint);
+    withCircle
+        ? _highlightFacesCircle(canvas, highlighter)
+        : _highlightFacesRect(canvas, highlighter);
+    _highlightLandmarks(canvas, highlighter);
   }
+
+  @override
+  bool shouldRepaint(AnnotatedImagePainter oldDelegate) =>
+      image != oldDelegate.image || faces != oldDelegate.faces;
 
   void _highlightFacesRect(Canvas canvas, Paint paint) {
     for (var face in faces) {
@@ -201,8 +205,13 @@ class AnnotatedImagePainter extends CustomPainter {
               }
             }),
       );
-
-  @override
-  bool shouldRepaint(AnnotatedImagePainter oldDelegate) =>
-      image != oldDelegate.image || faces != oldDelegate.faces;
 }
+
+Rect rectangleToRect(Rectangle rectangle) => Rect.fromLTRB(
+    rectangle.left.toDouble(),
+    rectangle.top.toDouble(),
+    rectangle.right.toDouble(),
+    rectangle.bottom.toDouble());
+
+Offset pointToOffset(Point point) =>
+    Offset(point.x.toDouble(), point.y.toDouble());
