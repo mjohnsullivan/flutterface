@@ -18,6 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Flutter Face Detector',
       home: FacePage(),
     );
@@ -35,7 +36,7 @@ class _FacePageState extends State<FacePage> {
 
   void _getImageAndDetectFaces() async {
     final imageFile = await ImagePicker.pickImage(
-      source: ImageSource.gallery,
+      source: ImageSource.camera,
     );
     final image = FirebaseVisionImage.fromFile(imageFile);
     final faceDetector = FirebaseVision.instance.faceDetector(
@@ -56,8 +57,10 @@ class _FacePageState extends State<FacePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Face Detector')),
-      body: _imageFile == null ? NoImage() : ImageWithFaces(_imageFile, _faces),
+      // appBar: AppBar(title: Text('Face Detector')),
+      body: _imageFile == null
+          ? NoImage()
+          : SimpleImageAndFaces(imageFilePath: _imageFile, faces: _faces),
       floatingActionButton: FloatingActionButton(
         onPressed: _getImageAndDetectFaces,
         tooltip: 'Pick an image',
@@ -75,7 +78,7 @@ class NoImage extends StatelessWidget {
 }
 
 class ImageWithFaces extends StatelessWidget {
-  ImageWithFaces(this.imageFilePath, this.faces);
+  ImageWithFaces({@required this.imageFilePath, @required this.faces});
   final File imageFilePath;
   final List<Face> faces;
 
@@ -89,6 +92,47 @@ class ImageWithFaces extends StatelessWidget {
             imageFilePath: imageFilePath,
             faces: faces,
           )),
+    );
+  }
+}
+
+class SimpleImageAndFaces extends StatelessWidget {
+  SimpleImageAndFaces({@required this.imageFilePath, @required this.faces});
+  final File imageFilePath;
+  final List<Face> faces;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: <Widget>[
+      Flexible(
+        flex: 2,
+        child: Container(
+            constraints: BoxConstraints.expand(),
+            child: Image.file(
+              imageFilePath,
+              fit: BoxFit.cover,
+            )),
+      ),
+      Flexible(
+        flex: 1,
+        child: ListView(
+          children: faces.map<Widget>((f) => FaceCoordinates(f)).toList(),
+        ),
+      ),
+    ]);
+  }
+}
+
+class FaceCoordinates extends StatelessWidget {
+  FaceCoordinates(this.face);
+  final Face face;
+
+  @override
+  Widget build(BuildContext context) {
+    final pos = face.boundingBox;
+    return ListTile(
+      title: Text('(${pos.top}, ${pos.left}), (${pos.bottom}, ${pos.right})'),
+      subtitle: Text('Probability of a smile: ${face.smilingProbability}'),
     );
   }
 }
